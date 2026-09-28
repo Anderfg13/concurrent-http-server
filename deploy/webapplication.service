@@ -1,0 +1,17 @@
+[Unit]
+Description=Java WebFramework application server
+After=network.target
+
+[Service]
+Type=simple
+User=ec2-user
+WorkingDirectory=/home/ec2-user/webapplication
+ExecStart=/usr/bin/java -jar /home/ec2-user/webapplication/webapplication.jar
+Environment=PORT=8080
+Environment=APP_ENV=production
+Environment=GREETING_PREFIX=Hello
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

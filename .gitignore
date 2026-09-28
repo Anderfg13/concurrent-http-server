@@ -1,0 +1,64 @@
+# Maven build output
+/target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+
+# Compiled class files
+*.class
+
+# IDE - NetBeans
+/nbproject/private/
+/nbbuild/
+/nbdist/
+/.nb-gradle/
+nb-configuration.xml
+nbactions.xml
+
+# IDE - IntelliJ
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# IDE - Eclipse
+.settings/
+.classpath
+.project
+
+# IDE - VS Code
+.vscode/
+
+# Editor/LSP caches
+.metals/
+.bloop/
+.ammonite/
+
+# OS metadata
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.bak
+*~
+
+# Environment / secrets / cloud credentials - NEVER commit these
+.env
+.env.*
+*.pem
+*.key
+*.ppk
+credentials.json
+aws-credentials
+.aws/
+/nbproject/

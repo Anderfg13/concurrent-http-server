@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Mini Web Application</title>
+</head>
+<body>
+    <h1>Servidor funcionando correctamente</h1>
+    <p>Esta es una pagina de prueba mientras se construye la interfaz real (Etapa 5).</p>
+    <img src="images/Databricks_Logo.png" alt="Logo de prueba" width="200">
+    <img src="images/File-Handling-in-Java.jpg" alt="Imagen JPEG de prueba" width="200">
+  
+
+    <!-- <section> es solo una caja/contenedor semantico: agrupa todo lo relacionado con "el servicio square" -->
+    <section>
+        <!-- <h2> = "heading nivel 2", un subtitulo (h1 ya lo usaste arriba para el titulo principal de toda la pagina) -->
+        <h2>Square of a number</h2>
+
+        <!-- <form> agrupa el/los input(s) + el boton. Por DEFECTO, al enviarse recarga la pagina -->
+        <!-- (eso lo vamos a evitar con JavaScript mas adelante, con preventDefault()) -->
+        <form id="square-form">
+            <!-- <label for="X"> conecta este texto descriptivo con el input que tenga id="X" -->
+            <label for="square-number"> Número: </label>
+
+            <!-- type="number": el navegador solo deja escribir digitos/decimales, con flechitas +/- -->
+            <!-- step="any": permite decimales (2.5, 0.3, etc), no solo enteros -->
+            <!-- name="number": nombre del campo (util si el form se enviara "a la antigua", sin JS) -->
+            <!-- required: el navegador no deja enviar el form si este campo esta vacio -->
+            <input type="number" id="square-number" name="number" step="any" required>
+
+            <!-- type="submit": este boton, al hacer click, dispara el evento "submit" del <form> que lo contiene -->
+            <button type="submit"> Calculate Square </button>
+        </form>
+
+        <!-- Estos 3 <p> empiezan OCULTOS (atributo "hidden"). JavaScript los va a mostrar/ocultar -->
+        <!-- y les va a cambiar el texto segun lo que responda el servidor (cargando / exito / error) -->
+        <p id="square-loading" hidden>Charging...</p>
+        <p id="square-result" hidden>Result: </p>
+        <p id="square-error" hidden>Error: </p>
+    </section>
+    <section>
+        <h2>Greeting</h2>
+        <form id="greeting-form">
+            <label for="greeting-name">Name:</label>
+            <input type="text" id="greeting-name" name="name" required>
+            <button type="submit">Send Greeting</button>
+        </form>
+        <p id="greeting-loading" hidden>Charging...</p>
+        <p id="greeting-result" hidden>Result: </p>
+        <p id="greeting-error" hidden>Error: </p>
+    </section>
+    <section>
+        <h2>Server Time</h2>
+        <!-- Como solo es un boton que me trae info y no debo enviar nada, por eso no hay ni label ni form y obviamente no hay input. -->
+        <button type="button" id = "server-time-button">Send Server Time</button>
+
+        <p id="server-time-loading" hidden>Charging...</p>
+        <p id="server-time-result" hidden>Result: </p>
+        <p id="server-time-error" hidden>Error: </p>
+    </section>
+
+    <script src="script.js"></script>
+</body>
+</html>

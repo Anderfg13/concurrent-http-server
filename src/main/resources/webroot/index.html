@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>WebFramework Demo</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <img src="images/logo.png" alt="Logo" class="logo">
+        <h1>Java WebFramework Demo</h1>
+        <p>Static files + lambda-based GET services, served by a sequential HTTP server.</p>
+    </header>
+
+    <main>
+        <section>
+            <h2>Greeting service (/hello)</h2>
+            <label for="name">Name:</label>
+            <input type="text" id="name" placeholder="world">
+            <button id="greet-button" type="button">Greet</button>
+            <p id="greet-result"></p>
+        </section>
+
+        <section>
+            <h2>Pi service (/pi)</h2>
+            <button id="pi-button" type="button">Get value of Pi</button>
+            <p id="pi-result"></p>
+        </section>
+
+        <section>
+            <h2>Square service (/square)</h2>
+            <label for="number">Number:</label>
+            <input type="number" id="number" step="any">
+            <button id="square-button" type="button">Calculate square</button>
+            <p id="square-result"></p>
+        </section>
+
+        <section>
+            <h2>Server time (/server-time)</h2>
+            <button id="time-button" type="button">Get server time</button>
+            <p id="time-result"></p>
+        </section>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>
