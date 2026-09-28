@@ -1,5 +1,7 @@
 # Java WebFramework — A Concurrent, Containerized Application Server
 
+**Video demonstration:** [Local Docker deployment and EC2 deployment walkthrough](https://youtu.be/JxwVO6iqA5U)
+
 ## Project description
 
 This project evolves the (originally sequential) HTTP server built in previous labs into a small
@@ -393,9 +395,76 @@ Manual verification of the Docker image (`docker build -t concurrent-http-server
 - REST endpoint 4: [http://13.217.224.52:8080/server-time](http://13.217.224.52:8080/server-time)
 - `/shutdown` disabled in production: [http://13.217.224.52:8080/shutdown](http://13.217.224.52:8080/shutdown) → `404 Not Found`
 
+## Docker Hub image
+
+**Repository:** [hub.docker.com/r/andyfg13/concurrent-http-server](https://hub.docker.com/r/andyfg13/concurrent-http-server)
+(tags `1.0` and `latest`)
+
+```bash
+docker pull andyfg13/concurrent-http-server:1.0
+```
+
+## Deploying the Docker image on AWS EC2 (this extension)
+
+In addition to the systemd-managed deployment above, the containerized build of this extension
+(virtual-thread concurrency + graceful shutdown) was verified end-to-end on its own Amazon Linux
+2023 EC2 instance (`t3.micro`), following [Running in Docker](#running-in-docker):
+
+```bash
+docker pull andyfg13/concurrent-http-server:1.0
+
+docker run -d \
+  --name concurrent-http-server \
+  --restart unless-stopped \
+  -e PORT=8080 \
+  -e APP_ENV=production \
+  -p 8080:8080 \
+  andyfg13/concurrent-http-server:1.0
+```
+
+Verified from an external machine against the instance's public IP (`3.237.105.66` at the time of
+this test):
+
+- `GET /hello?name=AWS` → `200`, `Hello AWS`.
+- `GET /pi` → `200`.
+- `GET /shutdown` → `404 Not Found` (route never registered, since `APP_ENV=production`).
+
+> The instance was terminated right after capturing this evidence, following the workshop's own
+> instruction to avoid unnecessary AWS charges — so the IP above is no longer reachable. The
+> `docker pull` command works against the published image regardless.
+
+## Video demonstration
+
+[Local Docker deployment and EC2 deployment walkthrough](https://youtu.be/JxwVO6iqA5U)
+
 ## Evidence and results
 
-**Cloud deployment**
+**Local execution and concurrency**
+
+| | | |
+|---|---|---|
+| ![Local run](docs/evidence/25-local-run.png) | ![Concurrent requests](docs/evidence/26-local-concurrent-requests.png) | ![Local graceful shutdown](docs/evidence/27-local-graceful-shutdown.png) |
+
+**Docker image build and local run**
+
+| | | |
+|---|---|---|
+| ![docker build](docs/evidence/28-docker-build.png) | ![docker images](docs/evidence/29-docker-images.png) | ![docker ps](docs/evidence/30-docker-run-ps.png) |
+| ![curl against container](docs/evidence/31-docker-curl-responses.png) | ![docker stop shows graceful shutdown](docs/evidence/32-docker-graceful-stop.png) | |
+
+**Docker Hub**
+
+![Docker Hub repository](docs/evidence/33-dockerhub-repo.png)
+
+**AWS EC2 (Docker deployment, this extension)**
+
+| | |
+|---|---|
+| ![EC2 instance running](docs/evidence/34-ec2-instance-running.png) | ![Security group rules](docs/evidence/35-ec2-security-group.png) |
+| ![docker pull and run on EC2](docs/evidence/36-ec2-docker-pull-run.png) | ![/hello from EC2](docs/evidence/37-ec2-curl-hello.png) |
+| ![/pi from EC2](docs/evidence/38-ec2-curl-pi.png) | ![/shutdown 404 in production](docs/evidence/39-ec2-shutdown-404-production.png) |
+
+**Cloud deployment (previous systemd-based lab)**
 
 | | |
 |---|---|
@@ -426,13 +495,21 @@ Manual verification of the Docker image (`docker build -t concurrent-http-server
 - [x] `/shutdown` stops the local server gracefully.
 - [x] The server handles connections concurrently (one virtual thread per connection).
 - [x] Shutdown is graceful under concurrency: in-flight connections drain before the process
-      exits, both via `/shutdown` (dev) and via `SIGTERM`/`docker stop`.
+      exits via the `/shutdown` route (dev); `SIGTERM`/`docker stop` was verified locally
+      (`docker logs` shows `Server stopped gracefully.`, see evidence) but not re-confirmed on
+      the EC2 instance before it was terminated.
 - [x] The application builds and runs as a Docker image (`Dockerfile`, verified locally with
-      `docker build` + `docker run`).
-- [x] The application is deployed publicly to the cloud — [http://13.217.224.52:8080/](http://13.217.224.52:8080/).
-- [x] The cloud deployment uses `APP_ENV=production` (set in `deploy/webapplication.service`).
-- [x] The production deployment does not expose `/shutdown` (returns `404`, see evidence).
-- [x] The README contains all required evidence screenshots.
+      `docker build` + `docker run`), and is published to Docker Hub.
+- [x] The Docker image was pulled and run successfully on its own AWS EC2 instance (Docker
+      deployment for this extension) and answered `/hello` and `/pi` publicly; the instance was
+      terminated afterwards to avoid charges.
+- [x] The application is also deployed publicly to the cloud via the previous systemd-based
+      setup — [http://13.217.224.52:8080/](http://13.217.224.52:8080/).
+- [x] The cloud deployment uses `APP_ENV=production` (set in `deploy/webapplication.service`, and
+      via `-e APP_ENV=production` for the Docker deployment).
+- [x] The production deployment does not expose `/shutdown` (returns `404`, see evidence, in both
+      the systemd and the Docker deployments).
+- [x] The README contains all required evidence screenshots and a video demonstration.
 
 ## Known limitations
 
