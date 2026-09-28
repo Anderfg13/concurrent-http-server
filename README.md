@@ -1,10 +1,10 @@
-# Java WebFramework — A Maintainable Application Server
+# Java WebFramework — A Concurrent, Containerized Application Server
 
 ## Project description
 
-This project evolves the sequential HTTP server built in the previous lab into a small
+This project evolves the (originally sequential) HTTP server built in previous labs into a small
 **application server** (a lightweight web framework): instead of hardcoding every dynamic route
-inside the server's connection loop with `if/else`, developers now register HTTP GET services
+inside the server's connection loop with `if/else`, developers register HTTP GET services
 as **Java lambda functions**. The framework:
 
 - Serves static resources (HTML, CSS, JavaScript, images) from a configurable static-files root.
@@ -13,11 +13,16 @@ as **Java lambda functions**. The framework:
 - Falls back to static files when no dynamic route matches, and returns `404` when nothing matches.
 - Reads deployment-specific configuration (port, greeting prefix, environment, static files path)
   from environment variables instead of hardcoding them.
-- Supports a graceful, sequential shutdown through a `/shutdown` route, available only when
-  `APP_ENV=development`.
-- Remains strictly **sequential**: one connection is fully processed (accepted, read, dispatched,
-  answered, closed) before the next one is accepted. There are no threads, pools, or asynchronous
-  server-side execution.
+- Handles connections **concurrently**: each accepted socket is dispatched to its own virtual
+  thread (Java 21, `Executors.newVirtualThreadPerTaskExecutor()`), so multiple requests are
+  processed in parallel instead of one at a time. See
+  [Concurrency and graceful shutdown](#concurrency-and-graceful-shutdown).
+- Shuts down gracefully: new connections stop being accepted, and connections already in flight
+  are given time to finish before the process exits — whether shutdown is requested through the
+  `/shutdown` route (dev only) or through a `SIGTERM` (e.g. `docker stop`, or an orchestrator
+  ending the container).
+- Runs the same way locally, in a Docker container, or on an EC2 instance: the only external
+  input is environment variables (`PORT`, `APP_ENV`, `GREETING_PREFIX`, `STATIC_FILES_PATH`).
 
 The previous lab's server (`co.edu.escuelaing.webapplication.webapplication.Webapplication`, with
 its hardcoded `if/else` routes) is kept untouched in the repository as the deliverable of that
@@ -96,7 +101,7 @@ Application (registers routes) → WebFramework (get/staticfiles/start/stop)
 | `Application` (`co.edu.escuelaing.app`) | Registers routes and reads its own configuration from environment variables. Knows nothing about sockets. |
 | `WebFramework` | Public facade: `staticfiles()`, `get()`, `start()`/`start(port)`, `stop()`. The only class an application developer needs to import. |
 | `Router` | Maps an HTTP method + path to the registered lambda (`Service`). Adding a route never touches the server loop. |
-| `HttpServer` | Accepts connections sequentially, parses the request line and query string, asks the `Router` for a match, falls back to `StaticFileService`, and writes the HTTP response. Implements the graceful shutdown flag. |
+| `HttpServer` | Accepts connections and dispatches each one to its own virtual thread, parses the request line and query string, asks the `Router` for a match, falls back to `StaticFileService`, and writes the HTTP response. Implements the concurrent connection handling and the graceful shutdown sequence. |
 | `Request` / `Response` | Represent HTTP data: `Request.getValue(name)` reads a query-string parameter; `Response` lets a lambda customize the status code and content type before the framework serializes the body. |
 | `StaticFileService` | Serves static resources: by default from the classpath (`src/main/resources/webroot`, bundled inside the jar); if `STATIC_FILES_PATH` is set, from that folder on disk instead. Rejects `..` segments to avoid resource-root escape. |
 
@@ -109,7 +114,8 @@ Application (registers routes) → WebFramework (get/staticfiles/start/stop)
 | Individual offices | The lambda handlers registered with `get(...)`: each one implements one specific service (`/hello`, `/pi`, `/square`, `/server-time`). |
 | Document archive | `StaticFileService`: hands out the building's fixed documents (HTML, CSS, JS, images) as-is, without asking anyone to "do work". |
 | Building configuration board | Environment variables (`PORT`, `GREETING_PREFIX`, `APP_ENV`, `STATIC_FILES_PATH`): set once per building (per deployment), never hardcoded into an office's behavior. |
-| Closing procedure | Graceful shutdown (`/shutdown`, dev only): the receptionist finishes serving the visitor currently at the desk, sends them off, and only then locks the front door — nobody is left mid-conversation. |
+| Closing procedure | Graceful shutdown (`/shutdown` in dev, or `SIGTERM`/`docker stop` anywhere): the receptionist stops letting new visitors in, but everyone already being helped (each on their own virtual-thread "assistant") finishes their business first — nobody is cut off mid-conversation. |
+| Multiple assistants at the front desk | Concurrency: the receptionist no longer serves one visitor fully before greeting the next — each visitor is immediately handed to their own assistant (a virtual thread), so many requests are attended at once. |
 
 ### Why this architecture is maintainable
 
@@ -143,6 +149,8 @@ HTTP Server                                 HTTP Server → Router → Lambda ha
 ```
 networking-lab-2/
 ├── pom.xml
+├── Dockerfile
+├── .dockerignore
 ├── deploy/
 │   └── webapplication.service                # systemd unit for the cloud deployment
 ├── public/                                   # previous lab's static resources (kept as-is)
@@ -214,6 +222,58 @@ java -cp target/webapplication.jar co.edu.escuelaing.webapplication.webapplicati
 
 No credentials, tokens, or secrets are configured or committed for this application.
 
+## Concurrency and graceful shutdown
+
+`HttpServer` accepts connections in a loop, but instead of processing each one before calling
+`accept()` again, it hands the accepted socket to `Executors.newVirtualThreadPerTaskExecutor()`
+(a Java 21 feature) and immediately goes back to accepting the next connection. Each request is
+therefore parsed, dispatched, and answered on its own lightweight virtual thread, so slow or
+concurrent clients no longer block one another — this replaces the previous lab's strictly
+sequential connection loop.
+
+Shutdown stays graceful under this model:
+
+1. `HttpServer.stop()` (called by the `/shutdown` route, or by a JVM shutdown hook registered in
+   `WebFramework.start()`) flips the running flag and closes the `ServerSocket`, which unblocks
+   the `accept()` loop without touching connections already being served.
+2. The main loop exits and calls `ExecutorService.shutdown()` + `awaitTermination(30s)`, which
+   waits for every virtual thread already handling a connection to finish and send its response.
+3. Only then does `start()` return and the process exit.
+
+Because the shutdown hook itself blocks (`HttpServer.awaitStopped(...)`) until that draining
+completes, a `SIGTERM` — the signal `docker stop` and container orchestrators send — triggers the
+exact same graceful sequence as the dev-only `/shutdown` route, not an abrupt kill.
+
+## Running in Docker
+
+The `Dockerfile` at the project root builds the jar in a Maven/Corretto 21 build stage and copies
+only the resulting jar into a minimal Corretto 21 runtime image — no local Maven installation is
+required to build the image.
+
+```bash
+docker build -t <dockerhub-user>/concurrent-http-server:1.0 .
+
+docker run -d \
+  --name concurrent-http-server \
+  -e PORT=8080 \
+  -e APP_ENV=production \
+  -p 8080:8080 \
+  <dockerhub-user>/concurrent-http-server:1.0
+
+curl http://localhost:8080/hello?name=Docker
+docker stop concurrent-http-server   # sends SIGTERM: verify "Server stopped gracefully." in the logs
+docker logs concurrent-http-server
+```
+
+Publish it to Docker Hub the same way as any other image:
+
+```bash
+docker login
+docker tag <dockerhub-user>/concurrent-http-server:1.0 <dockerhub-user>/concurrent-http-server:latest
+docker push <dockerhub-user>/concurrent-http-server:1.0
+docker push <dockerhub-user>/concurrent-http-server:latest
+```
+
 ## Routes
 
 | Route | Method | Query parameter | Example | Result |
@@ -266,6 +326,14 @@ target/webapplication.jar`):
   then exits its main loop and stops accepting new connections (verified: a subsequent request
   gets connection refused).
 - `GET /shutdown` with `APP_ENV=production` → `404 Not Found` (the route is never registered).
+
+Manual verification of the Docker image (`docker build -t concurrent-http-server:test .`):
+
+- `docker run` + `curl` against `/hello` and `/pi` on the mapped port → `200`, same responses as
+  running the jar directly.
+- `docker stop` (sends `SIGTERM`) → `docker logs` shows `Server listening on port 8080` followed
+  by `Server stopped gracefully.`; the container exits in under a second, confirming the shutdown
+  hook drains the server instead of the process being killed abruptly.
 
 > Evidence: see [Evidence and results](#evidence-and-results) below for the screenshots to attach.
 
@@ -356,7 +424,11 @@ target/webapplication.jar`):
 - [x] At least one additional environment variable is used (`GREETING_PREFIX`, `APP_ENV`,
       `STATIC_FILES_PATH`).
 - [x] `/shutdown` stops the local server gracefully.
-- [x] The server remains sequential (no threads/pools).
+- [x] The server handles connections concurrently (one virtual thread per connection).
+- [x] Shutdown is graceful under concurrency: in-flight connections drain before the process
+      exits, both via `/shutdown` (dev) and via `SIGTERM`/`docker stop`.
+- [x] The application builds and runs as a Docker image (`Dockerfile`, verified locally with
+      `docker build` + `docker run`).
 - [x] The application is deployed publicly to the cloud — [http://13.217.224.52:8080/](http://13.217.224.52:8080/).
 - [x] The cloud deployment uses `APP_ENV=production` (set in `deploy/webapplication.service`).
 - [x] The production deployment does not expose `/shutdown` (returns `404`, see evidence).
@@ -364,7 +436,6 @@ target/webapplication.jar`):
 
 ## Known limitations
 
-- The server is **strictly sequential**: no threads, pools, or concurrent request handling.
 - It only supports the `GET` method; any other method gets `405`.
 - Routes are matched by exact path only (no path parameters or wildcards).
 - It is not a production-grade HTTP server: no keep-alive, HTTPS, compression, or full HTTP

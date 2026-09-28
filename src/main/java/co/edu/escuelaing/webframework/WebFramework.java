@@ -1,6 +1,7 @@
 package co.edu.escuelaing.webframework;
 
 import java.io.IOException;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Public facade of the application server. This is the only class an application developer
@@ -48,6 +49,16 @@ public class WebFramework {
     }
 
     public static void start(int port) throws IOException {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            HttpServer.stop();
+            try {
+                // Give in-flight requests a chance to drain before the JVM halts; the JVM does
+                // not otherwise wait for a shutdown hook's side effects to finish elsewhere.
+                HttpServer.awaitStopped(35, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }, "shutdown-hook"));
         HttpServer.start(port, router, staticFileService);
     }
 
